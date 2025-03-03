@@ -1,0 +1,33 @@
+{
+  "name": "xts-marketdata-api",
+  "version": "0.0.5",
+  "description": "The official JS client library for the Symphony Fintech MarketData API's",
+  "main": "./lib/",
+  "keywords": [
+    "SymphonyFintech",
+    "Symphony",
+    "Fintech",
+    "trading",
+    "stockmarket",
+    "stock",
+    "Interactive",
+    "ClientApp"
+  ],
+  "author": "Nilesh Bhope, Naga Pavan Tanguturi",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.4",
+    "socket.io-client": "~2.2.0",
+    "ws": "^8.18.1",
+    "xts-marketdata-api": "^3.0.10"
+  },
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
