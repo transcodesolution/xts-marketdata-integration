@@ -4,8 +4,7 @@ import { OptionDataTable } from "../components/option-data-table";
 import { Container, Stack } from '@mantine/core';
 
 export const StockDataTable = () => {
-  const { stocks, sortedStockKeys } = useStockData();
-  console.log("StockDataTable: stockData", stocks);
+  const { sortedStockKeys } = useStockData();
 
   useEffect(() => {
     connectWebSocket();

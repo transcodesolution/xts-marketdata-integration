@@ -2,12 +2,13 @@ import { Box, Title, useMantineTheme } from "@mantine/core";
 import { IInstrument } from "../../store/types"
 import { DataTable, DataTableColumn } from "mantine-datatable";
 import { useStockData } from "../../store/useStockData";
+import { memo } from "react";
 
 interface IOptionDataTable {
   stockSymbol: string
 }
 
-export const OptionDataTable = ({ stockSymbol }: IOptionDataTable) => {
+export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
   const { stocks } = useStockData();
   const stock = stocks[stockSymbol];
   const theme = useMantineTheme();
@@ -62,4 +63,4 @@ export const OptionDataTable = ({ stockSymbol }: IOptionDataTable) => {
       />
     </Box>
   )
-}
+})
