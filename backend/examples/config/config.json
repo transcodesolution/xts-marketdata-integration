@@ -1,0 +1,9 @@
+{
+   "userID": "AJITKUMAR1",
+    "secretKey": "Xlvv834@9W",
+    "appKey": "c2ced77ad036782ac77986",
+    "source": "WEBAPI",
+    "url": "https://mtrade.arhamshare.com/apimarketdata",
+    "publishFormat": "JSON",
+    "broadcastMode": "Partial"
+}
