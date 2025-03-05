@@ -1,6 +1,7 @@
 var XtsMarketDataAPI = require("xts-marketdata-api").XtsMarketDataAPI;
 var XtsMarketDataWS = require("xts-marketdata-api").WS;
 var config = require("./config/config.json");
+var bs = require("black-scholes");
 
 let secretKey = config.secretKey;
 let appKey = config.appKey;
@@ -8,6 +9,7 @@ let source = config.source;
 let url = config.url;
 let userID = null;
 let isTradeSymbol = false;
+console.log("step-1");
 
 //xtsInteractive for API calls and xtsMarketDataWS for events related functionalities
 var xtsMarketDataAPI = null;
@@ -25,8 +27,7 @@ server.on("connection", (ws) => {
   });
 });
 
-let instrumentIds = [{ stock: "", ids: [] }];
-let selectedInstrumentIds = [];
+var instruments = {};
 
 (async () => {
   xtsMarketDataAPI = new XtsMarketDataAPI(url);
@@ -50,9 +51,9 @@ let selectedInstrumentIds = [];
 
       xtsMarketDataWS.init(socketInitRequest);
 
-      // await registerEvents();
+      await registerEvents();
 
-      // testAPI();
+      testAPI();
     } else {
       console.error("Login Time Error ", logIn);
     }
@@ -68,27 +69,26 @@ async function fetchInstruments() {
     let data = await Promise.all(
       stockList.map(async (stock) => {
         let searchInstrumentRequest = {
-          searchString: stock, // Use the actual stock name dynamically
+          searchString: stock,
           source: source,
         };
 
         let response = await searchInstrument(searchInstrumentRequest);
-        let ids = response.slice(0, 35); // Select the first 35 instrument
-        selectedInstrumentIds.push(...ids);
-        return { stock, ids: ids };
+        let searchedInstruments = response.slice(0, 33);
+        searchedInstruments.forEach((instrument) => {
+          instruments[instrument.ExchangeInstrumentID] = instrument;
+        })
+
       })
     );
-    instrumentIds = data.filter((item) => item !== undefined); // Remove undefined values
-    instrumentIds = data.flat(); //[33-33-33]
 
-    let instruments = selectedInstrumentIds
+    return Object.keys(instruments)
       .map((id) => ({
         exchangeSegment: xtsMarketDataAPI.exchangeSegments.NSEFO,
         exchangeInstrumentID: id,
       }))
       .slice(0, 100);
-    console.log(instruments, "instruments");
-    return instruments;
+
   } catch (error) {
     console.error("Error fetching instruments:", error);
   }
@@ -98,10 +98,10 @@ async function testAPI() {
   // get enums of application
   await clientConfig();
 
-  let instruments = await fetchInstruments();
+  let fetchInstrumentsData = await fetchInstruments();
 
   let subscriptionRequest = {
-    instruments: instruments,
+    instruments: fetchInstrumentsData,
     xtsMessageCode: 1502,
   };
   // subscribe instrument to get market data
@@ -130,7 +130,7 @@ var searchInstrument = async function (searchInstrumentRequest) {
     // Sort the strike prices in ascending order
     const sortedCEStrikePrices = filteredInstruments
       .sort((a, b) => a.StrikePrice - b.StrikePrice)
-      .map((item) => item.ExchangeInstrumentID);
+      .map((item) => item);
 
     return sortedCEStrikePrices;
   } catch (error) {
@@ -138,6 +138,39 @@ var searchInstrument = async function (searchInstrumentRequest) {
     throw error; // Re-throw the error after logging
   }
 };
+
+const lastTradedPrices = [];
+
+function calculateVolatility(prices) {
+  let logReturns = [];
+
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] > 0 && prices[i - 1] > 0) { // Avoid division by zero
+      logReturns.push(Math.log(prices[i] / prices[i - 1]));
+    }
+  }
+
+  if (logReturns.length === 0) return 0; // Avoid NaN if all values are zero
+
+  let meanReturn = logReturns.reduce((sum, r) => sum + r, 0) / logReturns.length;
+
+  let variance = logReturns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / (logReturns.length - 1);
+
+  return Math.sqrt(variance) * Math.sqrt(252); // Annualized volatility
+}
+
+function calculateIV(currentPrice, strikePrice, expirationTime, HistoryPriceArray, optionType) {
+  let time = expirationTime / 365;
+  let riskFreeInterest = 0.07
+  let volatility = calculateVolatility(HistoryPriceArray);
+ 
+  console.log(volatility, "volitilty");
+  
+  let result = bs.blackScholes(currentPrice, strikePrice, time, volatility, riskFreeInterest, "call");
+  console.log(result, "result");
+  
+  return result;
+}
 
 var clientConfig = async function () {
   let response = await xtsMarketDataAPI.clientConfig();
@@ -168,22 +201,33 @@ var registerEvents = async function () {
   });
 
   xtsMarketDataWS.onMarketDepthEvent((marketDepthData) => {
+    console.log("data");
+
     if (marketDepthData && marketDepthData.ExchangeInstrumentID) {
-      let stockEntry = instrumentIds.find((item) =>
-        item.ids.includes(marketDepthData.ExchangeInstrumentID)
+      let stockEntry = instruments[marketDepthData.ExchangeInstrumentID];
+      lastTradedPrices.push(marketDepthData.Touchline?.LastTradedPrice);
+
+      let impliedVolatility = calculateIV(
+        marketDepthData.Touchline?.LastTradedPrice,
+        stockEntry.StrikePrice,
+        stockEntry.RemainingExpiryDays,
+        lastTradedPrices,
+        stockEntry.optionType,
       );
+
       console.log(stockEntry, "stockEntry");
       if (stockEntry) {
+
         let instrumentData = {
           exchangeInstrumentID: marketDepthData.ExchangeInstrumentID,
           data: {
-            symbol: stockEntry.stock,
-            expiryDate: marketDepthData.ExpiryDate || "", // Ensure expiryDate is not undefined
-            strikePrice: marketDepthData.StrikePrice || 0, // Default to 0 if missing
+            symbol: stockEntry.Name,
+            expiryDate: stockEntry.ContractExpirationString || "", // Ensure expiryDate is not undefined
+            strikePrice: stockEntry.StrikePrice || 0, // Default to 0 if missing
             Call: {
               LTP: marketDepthData.Touchline?.LastTradedPrice || 0,
-              OI: marketDepthData.OpenInterest || 0,
-              IV: marketDepthData.ImpliedVolatility || 0,
+              OI: 1,
+              IV: impliedVolatility || 0,
               ChangeInOI: marketDepthData.ChangeInOpenInterest || 0,
               Volume: marketDepthData.Touchline?.TotalTradedQuantity || 0,
               CHNG: marketDepthData.Touchline?.PercentChange || 0,
@@ -194,8 +238,8 @@ var registerEvents = async function () {
             },
             Put: {
               LTP: marketDepthData.Touchline?.LastTradedPrice || 0, // Adjust if different for Put
-              OI: marketDepthData.OpenInterest || 0,
-              IV: marketDepthData.ImpliedVolatility || 0,
+              OI: 0,
+              IV: impliedVolatility || 0,
               ChangeInOI: marketDepthData.ChangeInOpenInterest || 0,
               Volume: marketDepthData.Touchline?.TotalTradedQuantity || 0,
               CHNG: marketDepthData.Touchline?.PercentChange || 0,
@@ -208,21 +252,22 @@ var registerEvents = async function () {
         };
 
         // Send as an array since the frontend expects IInstrument[]
-        const message = JSON.stringify({
-          event: "updateStockData",
-          stockData: [instrumentData],
-        });
+        // const message = JSON.stringify({
+        //   event: "updateStockData",
+        //   stockData: [instrumentData],
+        // });
 
-        clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-          }
-        });
+        // clients.forEach((client) => {
+        //   if (client.readyState === WebSocket.OPEN) {
+        //     client.send(message);
+        //   }
+        // });
       }
     }
   });
 
-  // //"logout" event listener
+  //"logout" event listener
+
   xtsMarketDataWS.onLogout((logoutData) => {
     console.log(logoutData);
   });
@@ -256,14 +301,24 @@ const broadcastMarketData = () => {
     ],
   };
 
-  const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
-    const change = base * (1 + (Math.random() * 2 - 1) * percentage);
-    return parseFloat(change.toFixed(decimalPlaces));
-  };
+const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
+  const change = base * (1 + (Math.random() * 2 - 1) * percentage);
+  return parseFloat(change.toFixed(decimalPlaces));
+};
 
   // Randomly select a stock
   const randomSymbol = symbols[Math.floor(Math.random() * symbols.length)];
   const instruments = instrumentData[randomSymbol];
+
+  let impliedVolatility = calculateIV(
+    generateRandomChange(180, 0.02, 2),
+    generateRandomChange(3500, 0.02, 2),
+    23,
+   [Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), ],
+    "call"
+  );
+  console.log(impliedVolatility, "impliedVolatility");
+  
 
   // Generate market data for 3 instruments of the selected stock
   const subscribedInstruments = instruments.map(
@@ -276,25 +331,25 @@ const broadcastMarketData = () => {
         Call: {
           LTP: generateRandomChange(strikePrice + 10, 0.02, 2),
           OI: Math.floor(generateRandomChange(100000, 0.05, 0)),
-          IV: generateRandomChange(18.5, 0.03, 2),
+          IV: impliedVolatility,
           ChangeInOI: Math.floor(generateRandomChange(5000, 0.1, 0)),
           volume: Math.floor(generateRandomChange(15000, 0.07, 0)),
           CHNG: generateRandomChange(12, 0.08, 2),
           BidQuantity: Math.floor(generateRandomChange(200, 0.1, 0)),
-          BidPrice: generateRandomChange(strikePrice + 9, 0.01, 2),
-          AskPrice: generateRandomChange(strikePrice + 11, 0.01, 2),
+          BID: generateRandomChange(strikePrice + 9, 0.01, 2),
+          ASK: generateRandomChange(strikePrice + 11, 0.01, 2),
           AskQuantity: Math.floor(generateRandomChange(250, 0.1, 0)),
         },
         Put: {
           LTP: generateRandomChange(strikePrice - 5, 0.02, 2),
           OI: Math.floor(generateRandomChange(85000, 0.05, 0)),
-          IV: generateRandomChange(17.8, 0.03, 2),
+          IV: impliedVolatility,
           ChangeInOI: Math.floor(generateRandomChange(4800, 0.1, 0)),
           volume: Math.floor(generateRandomChange(12000, 0.07, 0)),
           CHNG: generateRandomChange(-10, 0.08, 2),
           BidQuantity: Math.floor(generateRandomChange(220, 0.1, 0)),
-          BidPrice: generateRandomChange(strikePrice - 6, 0.01, 2),
-          AskPrice: generateRandomChange(strikePrice - 4, 0.01, 2),
+          BID: generateRandomChange(strikePrice - 6, 0.01, 2),
+          ASK: generateRandomChange(strikePrice - 4, 0.01, 2),
           AskQuantity: Math.floor(generateRandomChange(270, 0.1, 0)),
         },
       },
@@ -312,6 +367,6 @@ const broadcastMarketData = () => {
     }
   });
 };
-// setInterval(() => {
-//   broadcastMarketData();
-// }, 1000);
+setInterval(() => {
+  broadcastMarketData();
+}, 1000);

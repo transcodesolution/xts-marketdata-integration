@@ -23,8 +23,8 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
     { accessor: "data.Call.LTP", title: "LTP" },
     { accessor: "data.Call.CHNG", title: "Chng" },
     { accessor: "data.Call.BidQuantity", title: "Bid Qty" },
-    { accessor: "data.Call.BidPrice", title: "Bid" },
-    { accessor: "data.Call.AskPrice", title: "Ask" },
+    { accessor: "data.Call.BID", title: "Bid" },
+    { accessor: "data.Call.ASK", title: "Ask" },
     { accessor: "data.Call.AskQuantity", title: "Ask Qty" },
 
     // STRIKE PRICE (Middle Column)
@@ -40,8 +40,8 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
 
     // PUT SIDE
     { accessor: "data.Put.BidQuantity", title: "Bid Qty" },
-    { accessor: "data.Put.BidPrice", title: "Bid" },
-    { accessor: "data.Put.AskPrice", title: "Ask" },
+    { accessor: "data.Put.BID", title: "Bid" },
+    { accessor: "data.Put.ASK", title: "Ask" },
     { accessor: "data.Put.AskQuantity", title: "Ask Qty" },
     { accessor: "data.Put.CHNG", title: "Chng" },
     { accessor: "data.Put.LTP", title: "LTP" },
