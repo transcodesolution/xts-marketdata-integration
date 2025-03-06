@@ -5,7 +5,10 @@ import { immer } from "zustand/middleware/immer";
 export interface IStockData {
   stocks: Record<string, {
     name: string;
-    instruments: Record<string, IInstrument>;
+    strikePrice: number;
+    expiryDate: string;
+    call: Record<string, IInstrument>;
+    put: Record<string, IInstrument>;
   }>;
   sortedStockKeys: string[]
 }
@@ -24,27 +27,42 @@ export const connectWebSocket = () => {
 
     if (message.event === "updateStockData" && Array.isArray(message.stockData)) {
       useStockData.setState((state) => {
-        message.stockData.forEach((stock: IInstrument) => {
-          const symbol = stock.data.symbol;
+        message.stockData.forEach((stock: any) => {
+          const symbol = stock.symbol;
           const instrumentId = stock.exchangeInstrumentID;
 
           if (!state.stocks[symbol]) {
             state.stocks[symbol] = {
               name: symbol,
-              instruments: { [instrumentId]: stock }
+              strikePrice: stock.strikePrice,
+              expiryDate: stock.expiryDate,
+              call: {},
+              put: {},
             };
-          } else {
-            state.stocks[symbol].instruments[instrumentId] = stock;
+          } 
+          
+          if (stock.optionType === 3) {
+            // CE (Call Option)
+            state.stocks[symbol].call[instrumentId] = {
+              exchangeInstrumentID: instrumentId,
+              data: stock.data,
+            };
+          } else if (stock.optionType === 4) {
+            // PE (Put Option)
+            state.stocks[symbol].put[instrumentId] = {
+              exchangeInstrumentID: instrumentId,
+              data: stock.data,
+            };
           }
         });
 
         // 🔥 Sorting logic: Sort stocks based on the IV of the first instrument
         state.sortedStockKeys = Object.keys(state.stocks).sort((a, b) => {
-          const firstInstrumentA = Object.values(state.stocks[a].instruments)[0];
-          const firstInstrumentB = Object.values(state.stocks[b].instruments)[0];
+          const firstInstrumentA = Object.values(state.stocks[a].call)[0];
+          const firstInstrumentB = Object.values(state.stocks[b].call)[0];
 
-          const ivA = firstInstrumentA?.data?.Call.IV ?? 0;
-          const ivB = firstInstrumentB?.data?.Call.IV ?? 0;
+          const ivA = firstInstrumentA?.data?.IV ?? 0;
+          const ivB = firstInstrumentB?.data?.IV ?? 0;
 
           return ivB - ivA;  // Descending order (Higher IV first)
         });

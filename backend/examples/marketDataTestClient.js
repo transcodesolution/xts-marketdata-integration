@@ -9,7 +9,6 @@ let source = config.source;
 let url = config.url;
 let userID = null;
 let isTradeSymbol = false;
-console.log("step-1");
 
 //xtsInteractive for API calls and xtsMarketDataWS for events related functionalities
 var xtsMarketDataAPI = null;
@@ -73,12 +72,28 @@ async function fetchInstruments() {
           source: source,
         };
 
-        let response = await searchInstrument(searchInstrumentRequest);
-        let searchedInstruments = response.slice(0, 33);
-        searchedInstruments.forEach((instrument) => {
-          instruments[instrument.ExchangeInstrumentID] = instrument;
-        })
+        let optionType = ["CE", "PE"];
+        optionType.forEach(async (type) => {
+          let response = await searchInstrument(searchInstrumentRequest, type);
 
+          let avgstrikePrice = [];
+          response.forEach((id) => {
+            avgstrikePrice.push(id.StrikePrice);
+          });
+
+          let avgIndex = Math.ceil(avgstrikePrice.length / 2); // Find the middle           
+          let belowAvg = avgstrikePrice.slice(0, avgIndex).slice(-8); // Get last 16 from the first half
+          let aboveAvg = avgstrikePrice.slice(avgIndex, avgstrikePrice.length).slice(0, 8); // Get first 16 from second half
+          let selectedInstruments = [...belowAvg, ...aboveAvg];
+
+          let searchedInstruments = response.filter((instrument) =>
+            selectedInstruments.includes(instrument.StrikePrice)
+          );
+
+          searchedInstruments.forEach((instrument) => {
+            instruments[instrument.ExchangeInstrumentID] = instrument;
+          })
+        })
       })
     );
 
@@ -114,9 +129,9 @@ var subscription = async function (subscriptionRequest) {
   return response;
 };
 
-var searchInstrument = async function (searchInstrumentRequest) {
+var searchInstrument = async function (searchInstrumentRequest, optionType) {
   try {
-    let searchString = searchInstrumentRequest.searchString + " 27MAR2025 CE";
+    let stockString = searchInstrumentRequest.searchString + " 27MAR2025 " + optionType;
 
     let response = await xtsMarketDataAPI.searchInstrument(
       searchInstrumentRequest
@@ -124,11 +139,11 @@ var searchInstrument = async function (searchInstrumentRequest) {
     const result = response.result;
 
     // E.x. Filter for Reliance call options expiring on 27MAR2025
-    const filteredInstruments = result.filter((item) =>
-      item.DisplayName.includes(searchString)
+    const filteredInstrumentsCE = result.filter((item) =>
+      item.DisplayName.includes(stockString)
     );
     // Sort the strike prices in ascending order
-    const sortedCEStrikePrices = filteredInstruments
+    const sortedCEStrikePrices = filteredInstrumentsCE
       .sort((a, b) => a.StrikePrice - b.StrikePrice)
       .map((item) => item);
 
@@ -162,13 +177,11 @@ function calculateVolatility(prices) {
 function calculateIV(currentPrice, strikePrice, expirationTime, HistoryPriceArray, optionType) {
   let time = expirationTime / 365;
   let riskFreeInterest = 0.07
-  let volatility = calculateVolatility(HistoryPriceArray);
- 
-  console.log(volatility, "volitilty");
-  
-  let result = bs.blackScholes(currentPrice, strikePrice, time, volatility, riskFreeInterest, "call");
-  console.log(result, "result");
-  
+  let volatility = parseFloat(calculateVolatility(HistoryPriceArray).toFixed(2));
+
+  let num = bs.blackScholes(currentPrice, strikePrice, time, volatility, riskFreeInterest, "call");
+  let result = parseFloat(num.toFixed(2));
+
   return result;
 }
 
@@ -179,7 +192,7 @@ var clientConfig = async function () {
 
 var logOut = async function () {
   let response = await xtsMarketDataAPI.logOut();
-  console.log(response);
+  // console.log(response);
   return response;
 };
 
@@ -201,7 +214,6 @@ var registerEvents = async function () {
   });
 
   xtsMarketDataWS.onMarketDepthEvent((marketDepthData) => {
-    console.log("data");
 
     if (marketDepthData && marketDepthData.ExchangeInstrumentID) {
       let stockEntry = instruments[marketDepthData.ExchangeInstrumentID];
@@ -212,42 +224,25 @@ var registerEvents = async function () {
         stockEntry.StrikePrice,
         stockEntry.RemainingExpiryDays,
         lastTradedPrices,
-        stockEntry.optionType,
+        stockEntry.OptionType,
       );
-
       console.log(stockEntry, "stockEntry");
       if (stockEntry) {
-
         let instrumentData = {
+          symbol: stockEntry.Name,
+          strikePrice: stockEntry.StrikePrice || 0, // Default to 0 if missing
+          expiryDate: stockEntry.ContractExpirationString || "",
+          optionType: stockEntry.OptionType,
           exchangeInstrumentID: marketDepthData.ExchangeInstrumentID,
           data: {
-            symbol: stockEntry.Name,
-            expiryDate: stockEntry.ContractExpirationString || "", // Ensure expiryDate is not undefined
-            strikePrice: stockEntry.StrikePrice || 0, // Default to 0 if missing
-            Call: {
-              LTP: marketDepthData.Touchline?.LastTradedPrice || 0,
-              OI: 1,
-              IV: impliedVolatility || 0,
-              ChangeInOI: marketDepthData.ChangeInOpenInterest || 0,
-              Volume: marketDepthData.Touchline?.TotalTradedQuantity || 0,
-              CHNG: marketDepthData.Touchline?.PercentChange || 0,
-              BID: marketDepthData.Touchline?.BidInfo?.Price || 0,
-              ASK: marketDepthData.Touchline?.AskInfo?.Price || 0,
-              BidQuantity: marketDepthData.Touchline?.BidInfo?.Size || 0,
-              AskQuantity: marketDepthData.Touchline?.AskInfo?.Size || 0,
-            },
-            Put: {
-              LTP: marketDepthData.Touchline?.LastTradedPrice || 0, // Adjust if different for Put
-              OI: 0,
-              IV: impliedVolatility || 0,
-              ChangeInOI: marketDepthData.ChangeInOpenInterest || 0,
-              Volume: marketDepthData.Touchline?.TotalTradedQuantity || 0,
-              CHNG: marketDepthData.Touchline?.PercentChange || 0,
-              BID: marketDepthData.Touchline?.BidInfo?.Price || 0,
-              ASK: marketDepthData.Touchline?.AskInfo?.Price || 0,
-              BidQuantity: marketDepthData.Touchline?.BidInfo?.Size || 0,
-              AskQuantity: marketDepthData.Touchline?.AskInfo?.Size || 0,
-            },
+            LTP: marketDepthData.Touchline?.LastTradedPrice || 0,
+            IV: impliedVolatility || 0,
+            Volume: marketDepthData.Touchline?.TotalTradedQuantity || 0,
+            CHNG: marketDepthData.Touchline?.PercentChange || 0,
+            BID: marketDepthData.Touchline?.BidInfo?.Price || 0,
+            ASK: marketDepthData.Touchline?.AskInfo?.Price || 0,
+            BidQuantity: marketDepthData.Touchline?.BidInfo?.Size || 0,
+            AskQuantity: marketDepthData.Touchline?.AskInfo?.Size || 0,
           },
         };
 
@@ -301,10 +296,10 @@ const broadcastMarketData = () => {
     ],
   };
 
-const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
-  const change = base * (1 + (Math.random() * 2 - 1) * percentage);
-  return parseFloat(change.toFixed(decimalPlaces));
-};
+  const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
+    const change = base * (1 + (Math.random() * 2 - 1) * percentage);
+    return parseFloat(change.toFixed(decimalPlaces));
+  };
 
   // Randomly select a stock
   const randomSymbol = symbols[Math.floor(Math.random() * symbols.length)];
@@ -314,44 +309,27 @@ const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
     generateRandomChange(180, 0.02, 2),
     generateRandomChange(3500, 0.02, 2),
     23,
-   [Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), ],
+    [Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)),],
     "call"
   );
   console.log(impliedVolatility, "impliedVolatility");
-  
 
   // Generate market data for 3 instruments of the selected stock
   const subscribedInstruments = instruments.map(
     ({ instrumentID, strikePrice }) => ({
       exchangeInstrumentID: instrumentID, // Static instrument ID
+      symbol: randomSymbol,
+      strikePrice: generateRandomChange(strikePrice, 0.02, 2),
+      expiryDate: "2025-06-30",
       data: {
-        symbol: randomSymbol,
-        strikePrice: generateRandomChange(strikePrice, 0.02, 2),
-        expiryDate: "2025-06-30",
-        Call: {
-          LTP: generateRandomChange(strikePrice + 10, 0.02, 2),
-          OI: Math.floor(generateRandomChange(100000, 0.05, 0)),
-          IV: impliedVolatility,
-          ChangeInOI: Math.floor(generateRandomChange(5000, 0.1, 0)),
-          volume: Math.floor(generateRandomChange(15000, 0.07, 0)),
-          CHNG: generateRandomChange(12, 0.08, 2),
-          BidQuantity: Math.floor(generateRandomChange(200, 0.1, 0)),
-          BID: generateRandomChange(strikePrice + 9, 0.01, 2),
-          ASK: generateRandomChange(strikePrice + 11, 0.01, 2),
-          AskQuantity: Math.floor(generateRandomChange(250, 0.1, 0)),
-        },
-        Put: {
-          LTP: generateRandomChange(strikePrice - 5, 0.02, 2),
-          OI: Math.floor(generateRandomChange(85000, 0.05, 0)),
-          IV: impliedVolatility,
-          ChangeInOI: Math.floor(generateRandomChange(4800, 0.1, 0)),
-          volume: Math.floor(generateRandomChange(12000, 0.07, 0)),
-          CHNG: generateRandomChange(-10, 0.08, 2),
-          BidQuantity: Math.floor(generateRandomChange(220, 0.1, 0)),
-          BID: generateRandomChange(strikePrice - 6, 0.01, 2),
-          ASK: generateRandomChange(strikePrice - 4, 0.01, 2),
-          AskQuantity: Math.floor(generateRandomChange(270, 0.1, 0)),
-        },
+        LTP: generateRandomChange(strikePrice + 10, 0.02, 2),
+        IV: impliedVolatility,
+        volume: Math.floor(generateRandomChange(15000, 0.07, 0)),
+        CHNG: generateRandomChange(12, 0.08, 2),
+        BidQuantity: Math.floor(generateRandomChange(200, 0.1, 0)),
+        BID: generateRandomChange(strikePrice + 9, 0.01, 2),
+        ASK: generateRandomChange(strikePrice + 11, 0.01, 2),
+        AskQuantity: Math.floor(generateRandomChange(250, 0.1, 0)),
       },
     })
   );

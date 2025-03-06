@@ -1,7 +1,7 @@
 import { Box, Title, useMantineTheme } from "@mantine/core";
 import { IInstrument } from "../../store/types"
 import { DataTable, DataTableColumn } from "mantine-datatable";
-import { useStockData } from "../../store/useStockData";
+import { IStockData, useStockData } from "../../store/useStockData";
 import { memo } from "react";
 
 interface IOptionDataTable {
@@ -14,22 +14,22 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
   const theme = useMantineTheme();
 
 
-  const columns: DataTableColumn<IInstrument>[] = [
+  const columns: DataTableColumn<IStockData>[] = [
     // CALL SIDE
-    { accessor: "data.Call.OI", title: "OI" },
-    { accessor: "data.Call.ChangeInOI", title: "Chng in OI" },
-    { accessor: "data.Call.volume", title: "Volume" },
-    { accessor: "data.Call.IV", title: "IV" },
-    { accessor: "data.Call.LTP", title: "LTP" },
-    { accessor: "data.Call.CHNG", title: "Chng" },
-    { accessor: "data.Call.BidQuantity", title: "Bid Qty" },
-    { accessor: "data.Call.BID", title: "Bid" },
-    { accessor: "data.Call.ASK", title: "Ask" },
-    { accessor: "data.Call.AskQuantity", title: "Ask Qty" },
+    { accessor: "stocks.call.OI", title: "OI" },
+    { accessor: "stocks.call.ChangeInOI", title: "Chng in OI" },
+    { accessor: "stocks.call.Volume", title: "Volume" },
+    { accessor: "stocks.call.IV", title: "IV" },
+    { accessor: "stocks.call.LTP", title: "LTP" },
+    { accessor: "stocks.call.CHNG", title: "Chng" },
+    { accessor: "stocks.call.BidQuantity", title: "Bid Qty" },
+    { accessor: "stocks.call.BID", title: "Bid" },
+    { accessor: "stocks.call.ASK", title: "Ask" },
+    { accessor: "stocks.call.AskQuantity", title: "Ask Qty" },
 
     // STRIKE PRICE (Middle Column)
     {
-      accessor: "data.strikePrice",
+      accessor: "stocks.strikePrice",
       title: "Strike",
       cellsStyle: () => ({
         color: theme.colors.blue[6],
@@ -39,19 +39,24 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
     },
 
     // PUT SIDE
-    { accessor: "data.Put.BidQuantity", title: "Bid Qty" },
-    { accessor: "data.Put.BID", title: "Bid" },
-    { accessor: "data.Put.ASK", title: "Ask" },
-    { accessor: "data.Put.AskQuantity", title: "Ask Qty" },
-    { accessor: "data.Put.CHNG", title: "Chng" },
-    { accessor: "data.Put.LTP", title: "LTP" },
-    { accessor: "data.Put.IV", title: "IV" },
-    { accessor: "data.Put.volume", title: "Volume" },
-    { accessor: "data.Put.ChangeInOI", title: "Chng in OI" },
-    { accessor: "data.Put.OI", title: "OI" },
+    { accessor: "stocks.put.BidQuantity", title: "Bid Qty" },
+    { accessor: "stocks.put.BID", title: "Bid" },
+    { accessor: "stocks.put.ASK", title: "Ask" },
+    { accessor: "stocks.put.AskQuantity", title: "Ask Qty" },
+    { accessor: "stocks.put.CHNG", title: "Chng" },
+    { accessor: "stocks.put.LTP", title: "LTP" },
+    { accessor: "stocks.put.IV", title: "IV" },
+    { accessor: "stocks.put.Volume", title: "Volume" },
+    { accessor: "stocks.put.ChangeInOI", title: "Chng in OI" },
+    { accessor: "stocks.put.OI", title: "OI" },
   ];
 
-  const records = Object.values(stock.instruments);
+  const records: IStockData[] = [
+    {
+      stocks: { [stockSymbol]: stock },
+      sortedStockKeys: Object.keys(stock),
+    }
+  ];
   return (
     <Box bg='cyan'>
       <Title order={2} ta='center' p='md' c='white'>{stockSymbol}</Title>
