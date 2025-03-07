@@ -1,5 +1,9 @@
 export interface IInstrument {
   exchangeInstrumentID: string;
+  symbol: string;
+  strikePrice: number;
+  expiryDate: string;
+  optionType: number;
   data: OptionMetrics;
 }
 export interface OptionMetrics {

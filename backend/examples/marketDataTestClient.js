@@ -8,7 +8,6 @@ let appKey = config.appKey;
 let source = config.source;
 let url = config.url;
 let userID = null;
-let isTradeSymbol = false;
 
 //xtsInteractive for API calls and xtsMarketDataWS for events related functionalities
 var xtsMarketDataAPI = null;
@@ -65,7 +64,7 @@ async function fetchInstruments() {
   try {
     let stockList = ["RELIANCE", "TCS", "NHPC"];
 
-    let data = await Promise.all(
+    await Promise.all(
       stockList.map(async (stock) => {
         let searchInstrumentRequest = {
           searchString: stock,
@@ -247,16 +246,16 @@ var registerEvents = async function () {
         };
 
         // Send as an array since the frontend expects IInstrument[]
-        // const message = JSON.stringify({
-        //   event: "updateStockData",
-        //   stockData: [instrumentData],
-        // });
+        const message = JSON.stringify({
+          event: "updateStockData",
+          stockData: [instrumentData],
+        });
 
-        // clients.forEach((client) => {
-        //   if (client.readyState === WebSocket.OPEN) {
-        //     client.send(message);
-        //   }
-        // });
+        clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+          }
+        });
       }
     }
   });
@@ -269,82 +268,63 @@ var registerEvents = async function () {
 };
 
 // To work on dummy data
-const broadcastMarketData = () => {
-  const symbols = ["RELIANCE", "HDFC", "TCS", "ICICI"];
+// const broadcastMarketData = () => {
+//   const symbols = ["RELIANCE", "HDFC", "TCS"];
+//   const optionTypes = [3, 4];
+  
+//   const instrumentData = {
+//     RELIANCE: Array.from({ length: 5 }, (_, i) => ({ instrumentID: 1001 + i, strikePrice: 2400 + i * 50 })),
+//     HDFC: Array.from({ length: 5 }, (_, i) => ({ instrumentID: 2001 + i, strikePrice: 1600 + i * 25 })),
+//     TCS: Array.from({ length: 5 }, (_, i) => ({ instrumentID: 3001 + i, strikePrice: 3400 + i * 50 })),
+//   };
 
-  // Static instrument IDs per stock with 3 variations (e.g., strike price variations)
-  const instrumentData = {
-    RELIANCE: [
-      { instrumentID: 1001, strikePrice: 2500 },
-      { instrumentID: 1002, strikePrice: 2550 },
-      { instrumentID: 1003, strikePrice: 2600 },
-    ],
-    HDFC: [
-      { instrumentID: 2001, strikePrice: 1700 },
-      { instrumentID: 2002, strikePrice: 1725 },
-      { instrumentID: 2003, strikePrice: 1750 },
-    ],
-    TCS: [
-      { instrumentID: 3001, strikePrice: 3500 },
-      { instrumentID: 3002, strikePrice: 3550 },
-      { instrumentID: 3003, strikePrice: 3600 },
-    ],
-    ICICI: [
-      { instrumentID: 4001, strikePrice: 900 },
-      { instrumentID: 4002, strikePrice: 925 },
-      { instrumentID: 4003, strikePrice: 950 },
-    ],
-  };
+//   const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 0) => {
+//     const change = base * (1 + (Math.random() * 2 - 1) * percentage);
+//     return Math.round(change);
+//   };
 
-  const generateRandomChange = (base, percentage = 0.02, decimalPlaces = 2) => {
-    const change = base * (1 + (Math.random() * 2 - 1) * percentage);
-    return parseFloat(change.toFixed(decimalPlaces));
-  };
+//   const generateDummyData = () => {
+//     return symbols.flatMap((symbol) => {
+//       return instrumentData[symbol].flatMap(({ instrumentID, strikePrice }) => {
+//         return optionTypes.map((optionType, index) => {
+//           return {
+//             exchangeInstrumentID: instrumentID * 10 + index, // Unique ID for CALL and PUT
+//             symbol,
+//             strikePrice,
+//             expiryDate: "2025-06-30",
+//             optionType,
+//             data: {
+//               LTP: generateRandomChange(strikePrice + 10, 0.02, 0),
+//               IV: generateRandomChange(30, 0.05, 2),
+//               Volume: Math.floor(generateRandomChange(15000, 0.07, 0)),
+//               CHNG: generateRandomChange(12, 0.08, 2),
+//               BID: generateRandomChange(strikePrice + 9, 0.01, 0),
+//               ASK: generateRandomChange(strikePrice + 11, 0.01, 0),
+//               BidQuantity: Math.floor(generateRandomChange(200, 0.1, 0)),
+//               AskQuantity: Math.floor(generateRandomChange(250, 0.1, 0)),
+//             },
+//           };
+//         });
+//       });
+//     });
+//   };
 
-  // Randomly select a stock
-  const randomSymbol = symbols[Math.floor(Math.random() * symbols.length)];
-  const instruments = instrumentData[randomSymbol];
+//   const stockData = generateDummyData();
 
-  let impliedVolatility = calculateIV(
-    generateRandomChange(180, 0.02, 2),
-    generateRandomChange(3500, 0.02, 2),
-    23,
-    [Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)), Math.floor(generateRandomChange(5000, 0.1, 0)),],
-    "call"
-  );
-  console.log(impliedVolatility, "impliedVolatility");
+//   const message = JSON.stringify({
+//     event: "updateStockData",
+//     stockData,
+//   });
 
-  // Generate market data for 3 instruments of the selected stock
-  const subscribedInstruments = instruments.map(
-    ({ instrumentID, strikePrice }) => ({
-      exchangeInstrumentID: instrumentID, // Static instrument ID
-      symbol: randomSymbol,
-      strikePrice: generateRandomChange(strikePrice, 0.02, 2),
-      expiryDate: "2025-06-30",
-      data: {
-        LTP: generateRandomChange(strikePrice + 10, 0.02, 2),
-        IV: impliedVolatility,
-        volume: Math.floor(generateRandomChange(15000, 0.07, 0)),
-        CHNG: generateRandomChange(12, 0.08, 2),
-        BidQuantity: Math.floor(generateRandomChange(200, 0.1, 0)),
-        BID: generateRandomChange(strikePrice + 9, 0.01, 2),
-        ASK: generateRandomChange(strikePrice + 11, 0.01, 2),
-        AskQuantity: Math.floor(generateRandomChange(250, 0.1, 0)),
-      },
-    })
-  );
+//   clients.forEach((client) => {
+//     if (client.readyState === WebSocket.OPEN) {
+//       client.send(message);
+//     }
+//   });
+// };
 
-  const message = JSON.stringify({
-    event: "updateStockData",
-    stockData: subscribedInstruments,
-  });
 
-  clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-};
-setInterval(() => {
-  broadcastMarketData();
-}, 1000);
+
+// setInterval(() => {
+//   broadcastMarketData();
+// }, 1000);

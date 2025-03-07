@@ -1,7 +1,6 @@
 import { Box, Title, useMantineTheme } from "@mantine/core";
-import { IInstrument } from "../../store/types"
 import { DataTable, DataTableColumn } from "mantine-datatable";
-import { IStockData, useStockData } from "../../store/useStockData";
+import { useStockData } from "../../store/useStockData";
 import { memo } from "react";
 
 interface IOptionDataTable {
@@ -10,53 +9,54 @@ interface IOptionDataTable {
 
 export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
   const { stocks } = useStockData();
-  const stock = stocks[stockSymbol];
+  const stockData = stocks[stockSymbol];
+
   const theme = useMantineTheme();
 
 
-  const columns: DataTableColumn<IStockData>[] = [
-    // CALL SIDE
-    { accessor: "stocks.call.OI", title: "OI" },
-    { accessor: "stocks.call.ChangeInOI", title: "Chng in OI" },
-    { accessor: "stocks.call.Volume", title: "Volume" },
-    { accessor: "stocks.call.IV", title: "IV" },
-    { accessor: "stocks.call.LTP", title: "LTP" },
-    { accessor: "stocks.call.CHNG", title: "Chng" },
-    { accessor: "stocks.call.BidQuantity", title: "Bid Qty" },
-    { accessor: "stocks.call.BID", title: "Bid" },
-    { accessor: "stocks.call.ASK", title: "Ask" },
-    { accessor: "stocks.call.AskQuantity", title: "Ask Qty" },
+  const columns: DataTableColumn<{
+    strikePrice: string;
+    call: {};
+    put: {};
+  }>[] = [
+      // CALL SIDE
+      { accessor: "call.Volume", title: "Volume" },
+      { accessor: "call.IV", title: "IV" },
+      { accessor: "call.LTP", title: "LTP" },
+      { accessor: "call.CHNG", title: "Chng" },
+      { accessor: "call.BidQuantity", title: "Bid Qty" },
+      { accessor: "call.BID", title: "Bid" },
+      { accessor: "call.ASK", title: "Ask" },
+      { accessor: "call.AskQuantity", title: "Ask Qty" },
 
-    // STRIKE PRICE (Middle Column)
-    {
-      accessor: "stocks.strikePrice",
-      title: "Strike",
-      cellsStyle: () => ({
-        color: theme.colors.blue[6],
-        backgroundColor: theme.colors.blue[1],
-      }),
-      width: "125px",
-    },
+      // STRIKE PRICE (Middle Column)
+      {
+        accessor: "strikePrice",
+        title: "Strike Price",
+        cellsStyle: () => ({
+          color: theme.colors.blue[6],
+          backgroundColor: theme.colors.blue[1],
+        }),
+        width: "125px",
+      },
 
-    // PUT SIDE
-    { accessor: "stocks.put.BidQuantity", title: "Bid Qty" },
-    { accessor: "stocks.put.BID", title: "Bid" },
-    { accessor: "stocks.put.ASK", title: "Ask" },
-    { accessor: "stocks.put.AskQuantity", title: "Ask Qty" },
-    { accessor: "stocks.put.CHNG", title: "Chng" },
-    { accessor: "stocks.put.LTP", title: "LTP" },
-    { accessor: "stocks.put.IV", title: "IV" },
-    { accessor: "stocks.put.Volume", title: "Volume" },
-    { accessor: "stocks.put.ChangeInOI", title: "Chng in OI" },
-    { accessor: "stocks.put.OI", title: "OI" },
-  ];
+      // PUT SIDE
+      { accessor: "put.BidQuantity", title: "Bid Qty" },
+      { accessor: "put.BID", title: "Bid" },
+      { accessor: "put.ASK", title: "Ask" },
+      { accessor: "put.AskQuantity", title: "Ask Qty" },
+      { accessor: "put.CHNG", title: "Chng" },
+      { accessor: "put.LTP", title: "LTP" },
+      { accessor: "put.IV", title: "IV" },
+      { accessor: "put.Volume", title: "Volume" },
+    ];
 
-  const records: IStockData[] = [
-    {
-      stocks: { [stockSymbol]: stock },
-      sortedStockKeys: Object.keys(stock),
-    }
-  ];
+  const records = Object.entries(stockData).map(([strikePrice, data]) => ({
+    strikePrice,
+    call: data.call || {},
+    put: data.put || {}
+  }));
+
   return (
     <Box bg='cyan'>
       <Title order={2} ta='center' p='md' c='white'>{stockSymbol}</Title>
