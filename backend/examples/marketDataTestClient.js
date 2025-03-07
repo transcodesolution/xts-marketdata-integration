@@ -48,7 +48,7 @@ var instruments = {};
       };
 
       xtsMarketDataWS.init(socketInitRequest);
-
+      
       await registerEvents();
 
       testAPI();
@@ -74,7 +74,8 @@ async function fetchInstruments() {
         let optionType = ["CE", "PE"];
         optionType.forEach(async (type) => {
           let response = await searchInstrument(searchInstrumentRequest, type);
-
+          console.log(response, "response");
+          
           let avgstrikePrice = [];
           response.forEach((id) => {
             avgstrikePrice.push(id.StrikePrice);
@@ -95,7 +96,7 @@ async function fetchInstruments() {
         })
       })
     );
-
+    
     return Object.keys(instruments)
       .map((id) => ({
         exchangeSegment: xtsMarketDataAPI.exchangeSegments.NSEFO,
@@ -118,6 +119,8 @@ async function testAPI() {
     instruments: fetchInstrumentsData,
     xtsMessageCode: 1502,
   };
+  console.log(subscriptionRequest, "subscriptionRequest");
+  
   // subscribe instrument to get market data
   await subscription(subscriptionRequest);
   // await logOut();
@@ -153,35 +156,43 @@ var searchInstrument = async function (searchInstrumentRequest, optionType) {
   }
 };
 
-const lastTradedPrices = [];
+function blackScholesPrice(s, k, t, v, r, callPut) {
+  const d1 = (Math.log(s / k) + (r + (v ** 2) / 2) * t) / (v * Math.sqrt(t));
+  const d2 = d1 - v * Math.sqrt(t);
+  const N = (x) => (1 + Math.erf(x / Math.sqrt(2))) / 2; // CDF of standard normal
 
-function calculateVolatility(prices) {
-  let logReturns = [];
-
-  for (let i = 1; i < prices.length; i++) {
-    if (prices[i] > 0 && prices[i - 1] > 0) { // Avoid division by zero
-      logReturns.push(Math.log(prices[i] / prices[i - 1]));
-    }
+  if (callPut === "call") {
+    return s * N(d1) - k * Math.exp(-r * t) * N(d2);
+  } else {
+    return k * Math.exp(-r * t) * N(-d2) - s * N(-d1);
   }
-
-  if (logReturns.length === 0) return 0; // Avoid NaN if all values are zero
-
-  let meanReturn = logReturns.reduce((sum, r) => sum + r, 0) / logReturns.length;
-
-  let variance = logReturns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / (logReturns.length - 1);
-
-  return Math.sqrt(variance) * Math.sqrt(252); // Annualized volatility
 }
 
-function calculateIV(currentPrice, strikePrice, expirationTime, HistoryPriceArray, optionType) {
+function calculateIV(currentPrice, strikePrice, expirationTime, marketPrice, optionType) {
   let time = expirationTime / 365;
   let riskFreeInterest = 0.07
-  let volatility = parseFloat(calculateVolatility(HistoryPriceArray).toFixed(2));
+  let type = optionType == 3 ? "call" : "put";
 
-  let num = bs.blackScholes(currentPrice, strikePrice, time, volatility, riskFreeInterest, "call");
-  let result = parseFloat(num.toFixed(2));
+  let v = 0.3;  // Initial guess (30% volatility)
+  let epsilon = 1e-6;
+  let maxIterations = 100;
 
-  return result;
+  for (let i = 0; i < maxIterations; i++) {
+    let price = blackScholesPrice(currentPrice, strikePrice, time, v, riskFreeInterest, type);
+    let vega = (s * Math.exp(-0.5 * v * v * t) * Math.sqrt(t)) / Math.sqrt(2 * Math.PI); // Approximation of Vega
+
+    let diff = price - marketPrice;
+    if (Math.abs(diff) < epsilon) return v;
+
+    v -= diff / vega;
+
+    if (v <= 0) v = 0.0001;
+  }
+  console.log(v, 'result');
+
+  return v;
+
+  // return result;
 }
 
 var clientConfig = async function () {
@@ -216,13 +227,13 @@ var registerEvents = async function () {
 
     if (marketDepthData && marketDepthData.ExchangeInstrumentID) {
       let stockEntry = instruments[marketDepthData.ExchangeInstrumentID];
-      lastTradedPrices.push(marketDepthData.Touchline?.LastTradedPrice);
+      const marketPrice = (marketDepthData.Touchline?.BidInfo.Price || 0 + marketDepthData.Touchline?.AskInfo.Price || 0) / 2;
 
       let impliedVolatility = calculateIV(
         marketDepthData.Touchline?.LastTradedPrice,
         stockEntry.StrikePrice,
         stockEntry.RemainingExpiryDays,
-        lastTradedPrices,
+        marketPrice,
         stockEntry.OptionType,
       );
       console.log(stockEntry, "stockEntry");
@@ -267,11 +278,11 @@ var registerEvents = async function () {
   });
 };
 
-// To work on dummy data
+// // To work on dummy data
 // const broadcastMarketData = () => {
 //   const symbols = ["RELIANCE", "HDFC", "TCS"];
 //   const optionTypes = [3, 4];
-  
+
 //   const instrumentData = {
 //     RELIANCE: Array.from({ length: 5 }, (_, i) => ({ instrumentID: 1001 + i, strikePrice: 2400 + i * 50 })),
 //     HDFC: Array.from({ length: 5 }, (_, i) => ({ instrumentID: 2001 + i, strikePrice: 1600 + i * 25 })),
@@ -322,7 +333,6 @@ var registerEvents = async function () {
 //     }
 //   });
 // };
-
 
 
 // setInterval(() => {
