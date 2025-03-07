@@ -15,7 +15,7 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
 
 
   const columns: DataTableColumn<{
-    strikePrice: string;
+    strikePrice: number;
     call: {};
     put: {};
   }>[] = [
@@ -52,9 +52,9 @@ export const OptionDataTable = memo(({ stockSymbol }: IOptionDataTable) => {
     ];
 
   const records = Object.entries(stockData).map(([strikePrice, data]) => ({
-    strikePrice,
-    call: data.call || {},
-    put: data.put || {}
+    strikePrice: Number(strikePrice),
+    call: data.call?.data || {},
+    put: data.put?.data || {}
   }));
 
   return (

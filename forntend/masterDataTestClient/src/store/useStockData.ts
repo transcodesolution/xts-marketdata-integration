@@ -40,21 +40,32 @@ export const connectWebSocket = () => {
           const strikePrice = stock.strikePrice;
           const optionType = stock.optionType == 3 ? 'call' : 'put'
           if (!state.stocks[symbol]) {
-            state.stocks[symbol] = {
-              [strikePrice]: {
-                [optionType]: stock.data
-              }
-            };
-          } else {
-            if (!state.stocks[symbol][strikePrice]) {
-              state.stocks[symbol][strikePrice] = {};
-            }
-            state.stocks[symbol][strikePrice][optionType] = stock.data;
+            state.stocks[symbol] = {};
           }
+
+          if (!state.stocks[symbol][strikePrice]) {
+            state.stocks[symbol][strikePrice] = {};
+          }
+
+          state.stocks[symbol][strikePrice][optionType] = stock;
         });
-      });
-    }
-  };
+
+        state.sortedStockKeys = Object.keys(state.stocks).sort((a, b) => {
+          const getFirstIV = (symbol: string) => {
+            const strikeKeys = Object.keys(state.stocks[symbol]);
+
+            if (strikeKeys.length === 0) return 0;
+
+            const firstStrike = strikeKeys[0];
+            const firstInstrument = state.stocks[symbol][firstStrike];
+
+            return firstInstrument?.call?.data?.IV ?? firstInstrument?.put?.data?.IV ?? 0;
+          };
+          return getFirstIV(b) - getFirstIV(a);
+        });
+      })
+    };
+  }
   ws.onopen = () => console.log("Connected to WebSocket");
   ws.onclose = () => console.log("Disconnected from WebSocket");
   ws.onerror = (err) => console.error("WebSocket error", err);
